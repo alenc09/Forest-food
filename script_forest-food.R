@@ -1,4 +1,8 @@
+<<<<<<< Updated upstream
 setwd("") #please set your working directory
+=======
+setwd("") #please set your preferable working directory
+>>>>>>> Stashed changes
 
 #library####
 library(readxl)
@@ -7,6 +11,8 @@ library(ggplot2)
 library(geobr)
 library(ggthemes)
 library(ggsignif)
+library(sf)
+library(spdep)
 #library(factoextra)
 #library(corrplot)
 #library(RColorBrewer)
@@ -369,7 +375,7 @@ map_fsc%>%
   glimpse() ->a
 
 #2006
-glm(data = a, fs_06 ~ nvcPerc_06 + I(nvcPerc_06^2)) -> glmq.fs06_fc06
+glm(data = a[-1,], fs_06 ~ nvcPerc_06 + I(nvcPerc_06^2)) -> glmq.fs06_fc06
 summary(glmq.fs06_fc06)
 
 ggplot(a, aes(x = nvcPerc_06, y = fs_06))+
@@ -384,7 +390,7 @@ ggplot(a, aes(x = nvcPerc_06, y = fs_06))+
 fs_fc_06
 
 #2017
-glm(data = a, fs_17 ~ nvcPerc_17 + I(nvcPerc_17^2)) -> glmq.fs17_fc17
+glm(data = a[-1,], fs_17 ~ nvcPerc_17 + I(nvcPerc_17^2)) -> glmq.fs17_fc17
 summary(glmq.fs17_fc17)
 
 ggplot(a, aes(x = nvcPerc_17, y = fs_17))+
@@ -397,6 +403,27 @@ ggplot(a, aes(x = nvcPerc_17, y = fs_17))+
   theme(text = element_text(family = '', size = 8),
         plot.background = element_blank())-> fs_fc_17
 fs_fc_17
+
+# Spatial autocorrelation test####
+
+read_sf("/home/lucas/Documentos/Doutorado/Dados/muncat_2020.shp")->mun_cat
+a$code_muni<-as.character(a$code_muni)
+inner_join(mun_cat, a[-1,], by = c("CD_MUN" = "code_muni"))-> mun_cat_data
+poly2nb(mun_cat_data, queen=TRUE)-> mat_dist2
+nb2listw(mat_dist2)->mat_dist_list
+lm.morantest(glmq.fs06_fc06, mat_dist_list, alternative = "two.sided")
+lm.morantest(glmq.fs17_fc17, mat_dist_list, alternative = "two.sided")
+
+#Spatial autoregressive models####
+errorsarlm(data = a[-1,],
+           fs_06 ~ nvcPerc_06 + I(nvcPerc_06^2),
+           listw = mat_dist_list)->sem.fs06
+summary(sem.fs06)
+
+errorsarlm(data = a[-1,],
+           fs_17 ~ nvcPerc_17 + I(nvcPerc_17^2),
+           listw = mat_dist_list)->sem.fs17
+summary(sem.fs17)
 
 #ANOVA and Boxplots of inequality and poverty####
 a%>%
