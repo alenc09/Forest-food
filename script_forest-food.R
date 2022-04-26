@@ -1,4 +1,4 @@
-setwd("") #please set yout preferable working directory
+setwd("") #please set your working directory
 
 #library####
 library(readxl)
