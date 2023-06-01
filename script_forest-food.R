@@ -1,8 +1,6 @@
-<<<<<<< Updated upstream
-setwd("") #please set your working directory
-=======
-setwd("") #please set your preferable working directory
->>>>>>> Stashed changes
+# Thu Jun  1 14:47:40 2023 ------------------------------
+#Script of forest and food security in Caatinga
+
 
 #library####
 library(readxl)
