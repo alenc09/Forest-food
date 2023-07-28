@@ -1,7 +1,12 @@
-# Thu Jun  1 14:47:40 2023 ------------------------------
-#Script of forest and food security in Caatinga
+---
+title: "forest-food"
+author: "Felipe Melo & Lucas Alencar"
+date: '2022-09-12'
+output: html_document
+---
 
-
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
 #library####
 library(readxl)
 library(dplyr)
@@ -10,26 +15,35 @@ library(geobr)
 library(ggthemes)
 library(ggsignif)
 library(sf)
-library(spdep)
-#library(factoextra)
-#library(corrplot)
-#library(RColorBrewer)
-#library(tibble)
-#library(tidyr)
-library(here)
+library(pracma)
 library(cowplot)
+library(factoextra)
+library(ggfortify)
+library(spdep)
+library(tidyverse)
+#setwd("~/Google Drive/github/forest-food")
+#load(".RData")
+```
 
+## Bases de dados
+
+```{r github, echo=TRUE}
 #data####
 read_xlsx('./dbcap2_clean.xlsx')-> dbcap2_clean #read to R the .xlsx file with all variables
 
-#Analisys####
-#PCA 2006 ####
+```
+
+## Analises PCA
+
+```{r}
+#data preparation
 dbcap2_clean%>%
   select(1, ends_with(c("06","00", "08")))%>%
   glimpse()-> dbcap2_06.2
-
+#Aalises PCA
 prcomp(dbcap2_06.2[,-c(1,2)],scale. = T, center = T)->pca_06.2
 summary(pca_06.2)
+pca_06.2$sdev
 pca_06.2$rotation
 ncomp_06.2<-12
 pca.varimax_06.2 <- varimax(pca_06.2$rotation[, 1:ncomp_06.2])
@@ -70,9 +84,12 @@ colnames(mun_scores_17)
 mun_scores_17
 write.csv(mun_scores_17, "mun_scores_17.csv")
 
+```
 
+## Dados para os Mapas Food-Forest
 
-#############################         Maps          #####################################
+```{r}
+
 #Data and file for maps####
 #Individual dimensions of PCA and final aggregated score - 2006####
 read_municipality()-> mun_caat #All "read_" function from geobr packages might take a while to load
@@ -249,9 +266,6 @@ dbcap2_clean%>%
   left_join(x = ., y = map_fsc)%>%
   glimpse() ->map_fsc
 
-map_fsc%>%
-  mutate(netFor = as.factor(if_else(condition = fcc > 0, true = "Positive", false = "Negative")))%>%
-  glimpse()->map_fsc
 
 data.frame(dbcap2_17.2[,1], fs_score_06$fs_score, fs_score_17$fs_score) -> fsc
 
@@ -260,9 +274,13 @@ fsc%>%
   mutate(fsc = fs_17 - fs_06)%>%
   glimpse()-> fsc.score
 
+# fsc.score %>% 
+#   mutate(category=cut(fsc, breaks=c(-Inf, -1.5, 0, 1.5, Inf), # mudei para 4 categorias para ficar igual ao do forest cover
+#                       labels=c("High loss","Loss","Gain", "High Gain")))->fsc.score_class
 fsc.score %>% 
-  mutate(category=cut(fsc, breaks=c(-Inf, -1.5, -0.5, 0.5, 1.5, Inf), 
-                      labels=c("High lost","Lost","Stable","Gain", "High Gain")))->fsc.score_class
+  mutate(category=cut(fsc, breaks=c(-Inf, 0, Inf), # mudei para 4 categorias para ficar igual ao do forest cover
+                      labels=c("Net Loss","Net Gain")))->fsc.score_class
+
 inner_join(mun_caat, fsc.score_class, by = "code_muni")-> map_fsc
 
 dbcap2_clean%>%
@@ -272,33 +290,52 @@ dbcap2_clean%>%
   glimpse() ->map_fsc
 
 map_fsc%>%
-  mutate(relation = as.factor(if_else(condition = fcc > 0 & fsc>0, true = "win-win",
-                                      false = if_else(condition = fcc > 0 & fsc < 0, true = "win-lose",
-                                                      false = if_else(condition = fcc< 0 & fsc > 0, true = "lose-win",
-                                                                      false = if_else(condition = fcc<0 & fsc <0, true = "lose-lose",
+  mutate(relation = as.factor(if_else(condition = fcc > 0 & fsc>0, true = "Gain-Gain",
+                                      false = if_else(condition = fcc > 0 & fsc < 0, true = "Gain-Lose",
+                                                      false = if_else(condition = fcc< 0 & fsc > 0, true = "Lose-Gain",
+                                                                      false = if_else(condition = fcc<0 & fsc <0, true = "Lose-Lose",
                                                                                       false = "pizza"))))))%>%
   glimpse()-> map_fsc
 
-#Map of Brazil with Caatinga highlighted####
+map_fsc%>%
+  mutate(netFor = as.factor(if_else(condition = fcc > 0, true = "Net Gain", false = "Net Loss")))%>%
+  glimpse()->map_fsc
+
+```
+
+## Mapas Food-Forest
+### Área de estudo
+
+```{r}
+caatinga<-read_biomes()
+caatinga<-caatinga[2,]
+  
 ggplot()+
   geom_sf(data = brazil, fill = "antiquewhite1")+
-  geom_sf(data = dim1_06$geom, aes(fill = "grey50"), lwd = 0)+
-  scale_fill_manual(values = "grey50", labels = "Caatinga municipalities")+
+  geom_sf(data = caatinga$geom, aes(fill = "transparent"))+
+  #geom_sf(data = dim1_06$geom, aes(color = "grey50"), lwd = 0.5)+
+  scale_fill_manual(values = "grey50", labels = "Caatinga Biome")+
   guides(fill=guide_legend(title=NULL))+
   geom_sf(data = uf, fill = "transparent")+
   scale_x_continuous(breaks = c(-70, -55, -40))+
   scale_y_continuous(breaks = c(0, -15, -30))+
-  theme(text = element_text(family = '', size = 6),
-        panel.grid.major = element_blank(),
-        panel.background = element_blank(),
-        axis.title = element_blank(),
-        legend.position = c(0.8, 0.2),
-        legend.key.size = unit(2, "mm"),
-        legend.text = element_text(size = 8),
-        legend.title = element_text(size = 8)) -> fig1a
+  labs(x="Longitude", y="Latitude")+
+  theme_bw()+
+  theme(legend.position = c(0.8, 0.2))-> fig1a
+  # theme(text = element_text(family = '', size = 6),
+  #       panel.grid.major = element_blank(),
+  #       panel.background = element_blank(),
+  #       axis.title = element_blank(),
+  #       legend.position = c(0.8, 0.2),
+  #       legend.key.size = unit(2, "mm"),
+  #       legend.text = element_text(size = 8),
+  #       legend.title = element_text(size = 8)) 
 fig1a
+```
 
-#Map of Forest cover change####
+## Map of Forest cover change
+```{r}
+
 ggplot()+
   geom_sf(data=map_fsc$geom, aes(fill = map_fsc$fcc), lwd=0.1)+
   scale_fill_gradientn(colours =c("#D73027", "#F46D43", "#FFEDA0", "#D9EF8B", "#A6D96A", "#66BD63", "#1A9850"), name = "Change in \nforest cover (%) \n2006-2017")+
@@ -313,31 +350,33 @@ ggplot()+
   scale_y_continuous(breaks = c(-4,-10, -16))+
   labs(x=NULL, y=NULL)+
   theme_bw()+
-  # theme(legend.position = c(0.9, 0.2),
-  #       legend.background = element_blank(),
-  #       panel.grid.major = element_blank())+ 
-theme(text = element_text(family = '', size = 6),
-      panel.grid.major = element_blank(),
-      panel.background = element_blank(),
-      axis.title = element_blank(),
-      axis.text.x = element_blank(),
-      axis.ticks.x = element_blank(),
-      legend.key.size = unit(3, "mm"),
-      legend.position = c(0.83, 0.18),
-      legend.text = element_text(size = 7),
-     legend.title = element_text(size = 7)) -> fcc.map
+  theme(legend.position = c(0.85, 0.2),
+        legend.background = element_blank(),
+         panel.grid.major = element_blank())-> fcc.map
+  # theme(text = element_text(family = '', size = 6),
+  #       panel.grid.major = element_blank(),
+  #       panel.background = element_blank(),
+  #       axis.title = element_blank(),
+  #       axis.text.x = element_blank(),
+  #       axis.ticks.x = element_blank(),
+  #       legend.key.size = unit(2, "mm"),
+  #       legend.position = c(0.8, 0.2),
+  #       legend.text = element_text(size = 8),
+  #      legend.title = element_text(size = 8))
 fcc.map 
 
-#Map of food security change####
+```
+
+
+#Map of food security change
+```{r}
 
 fsc.score_class %>% 
   mutate(fcs_perc=(fs_17/fs_06)*100)->fsc.score_class
 
 ggplot()+
   geom_sf(data=map_fsc$geom, aes(fill =  fsc.score_class$fsc),lwd=0.1)+
-  scale_fill_gradientn(colours =c("#B35806", "#E08214", "#FDB863", "#FEE0B6",
-                                  "#F7F7F7", "#D8DAEB", "#B2ABD2", "#8073AC", "#542788"),
-                       name = "Change in \nFood Security \nIndex")+
+  scale_fill_gradientn(colours =c("#B35806", "#E08214", "#FDB863", "#FEE0B6", "#F7F7F7", "#D8DAEB", "#B2ABD2", "#8073AC", "#542788"), name = "Change in \nFood Security Index")+
   geom_sf(data=uf_caat, fill="transparent")+
   coord_sf(xlim = c(-48, -34), ylim = c(-17.1, -3))+
   geom_text(data = uf_caat, aes(x= c(-42, -39.5,-36.5,-35.5, -34.5, -34.4, -36, -39,-42.4),
@@ -348,29 +387,25 @@ ggplot()+
   scale_y_continuous(breaks = c(-4,-10, -16))+
   labs(x=NULL, y=NULL)+
   theme_bw()+
-  # theme(legend.position = c(0.7, 0.2),
-  #       legend.background = element_blank(),
-  #       panel.grid.major = element_blank()) + 
-theme(text = element_text(family = '', size = 6),
-      panel.grid.major = element_blank(),
-      panel.background = element_blank(),
-      axis.title = element_blank(),
-      legend.key.size = unit(3, "mm"),
-      legend.position = c(0.83, 0.18),
-      legend.text = element_text(size = 7),
-      legend.title = element_text(size = 7)) -> fsc.map
+ theme(legend.position = c(0.85, 0.2),
+        legend.background = element_blank(),
+         panel.grid.major = element_blank())-> fsc.map
+  # theme(text = element_text(family = '', size = 6),
+  #       panel.grid.major = element_blank(),
+  #       panel.background = element_blank(),
+  #       axis.title = element_blank(),
+  #       legend.key.size = unit(2, "mm"),
+  #       legend.position = c(0.9, 0.2),
+  #       legend.text = element_text(size = 8),
+  #       legend.title = element_text(size = 8))
 fsc.map
+```
 
-##Figure 2----
-plot_grid(fcc.map, fsc.map, labels = "AUTO", label_y = 1) ->fig2
-fig2
 
-ggsave(filename = here("figures/fig2.jpg"),
-       plot = fig2,
-       dpi = 600,
-       width = 8)
+##Map of forest cover and food security relationship
 
-#Map of forest cover and food security relationship####
+```{r}
+
 ggplot()+
   geom_sf(data=map_fsc$geom, aes(fill = map_fsc$relation), lwd=0.1)+ # chamar map_fsc$relation do script analysis_cap2.R
   # scale_fill_manual(values = c("#d7191c",  "#fdae61", "#abd9e9", "#2c7bb6"), 
@@ -389,33 +424,49 @@ ggplot()+
   labs(size=8, fill = "Forest cover-\nFood security") +
   labs(x=NULL, y=NULL)+
   theme_bw()+
-  # theme(legend.position = c(0.85, 0.2),
-  #       legend.background = element_blank(),
-  #       panel.grid.major = element_blank())
-theme(text = element_text(family = '', size = 6),
-      panel.grid.major = element_blank(),
-      panel.background = element_blank(),
-      axis.title = element_blank(),
-      axis.text.y = element_blank(),
-      axis.ticks.y = element_blank(),
-      legend.key.size = unit(2, "mm"),
-      legend.position = c(0.85, 0.2),
-      legend.text = element_text(size = 8),
-      legend.title = element_text(size = 8)) -> fcc_fsc.map
-
+  theme(legend.position = c(0.85, 0.2),
+        legend.background = element_blank(),
+         panel.grid.major = element_blank())-> fcc_fsc.map
+  # theme(text = element_text(family = '', size = 6),
+  #       panel.grid.major = element_blank(),
+  #       panel.background = element_blank(),
+  #       axis.title = element_blank(),
+  #       axis.text.y = element_blank(),
+  #       axis.ticks.y = element_blank(),
+  #       legend.key.size = unit(2, "mm"),
+  #       legend.position = c(0.9, 0.2),
+  #       legend.text = element_text(size = 8),
+  #       legend.title = element_text(size = 8))
+ 
 fcc_fsc.map
 
-##Figure 3----
-ggsave(filename = here("figures/fig3.jpg"),
-       plot = fcc_fsc.map,
-       dpi = 600)
+```
 
-#Generalized Linear Models####
+# Juntando os mapas
+
+```{r}
+ggdraw() +
+  draw_plot(fcc.map, x = 0, y = .5, width = .5, height = .5) +
+  draw_plot(fsc.map, x = .5, y = .5, width = .5, height = .5) +
+  #draw_plot(fcc_fsc.map, x = 0, y = 0, width = 1, height = 0.5) +
+  draw_plot_label(label = c("A", "B"), size = 15,
+                  x = c(0, 0.5), y = c(1, 1))->fig2
+fig2
+```
+
+# Generalized Linear Model
+## Preparando as bases
+
+```{r}
 map_fsc%>%
   inner_join(x = ., y = select(dbcap2_clean, code_muni, nvcPerc_06, nvcPerc_17))%>%
   glimpse() ->a
+```
 
-##food security  2006----
+# Testes para o ano de 2006
+
+```{r}
+
 lm(data = a[-1,], fs_06 ~ nvcPerc_06 + I(nvcPerc_06^2)) -> glmq.fs06_fc06
 summary(glmq.fs06_fc06)
 summary(aov(glmq.fs06_fc06))
@@ -424,16 +475,19 @@ ggplot(a, aes(x = nvcPerc_06, y = fs_06))+
   geom_point(colour = "#003f5c", size= 3, alpha = 1/3)+
   geom_hline(yintercept =0, linetype = "dashed")+
   stat_smooth(method = "lm", formula = y ~ x + I(x^2), lwd = 0.5, fill = "grey20", color = "black")+
-  scale_y_continuous(limits = c(-6, 6))+
+   scale_y_continuous(limits = c(-6, 6))+
   theme_base()+
   theme(legend.position = "none")+
   labs(x = NULL, y = "Food security index", title = "year of 2006")+
-  theme(text = element_text(family = '', size = 10),
+  theme(text = element_text(family = '', size = 12),
         plot.background = element_blank(),
         plot.title = element_text(hjust = 0.5))-> fs_fc_06
 fs_fc_06
+```
 
-##food security 2017----
+# Teste para o ano de 2017
+```{r}
+#2017
 glm(data = a[-1,], fs_17 ~ nvcPerc_17 + I(nvcPerc_17^2)) -> glmq.fs17_fc17
 summary(glmq.fs17_fc17)
 
@@ -445,75 +499,20 @@ ggplot(a, aes(x = nvcPerc_17, y = fs_17))+
   theme_base()+
   theme(legend.position = "none")+
   labs(x = NULL, y =NULL, title = "year of 2017")+
-  theme(text = element_text(family = '', size = 10),
+  theme(text = element_text(family = '', size = 12),
         plot.background = element_blank(),
         plot.title = element_text(hjust = 0.5))-> fs_fc_17
 fs_fc_17
 
-##PC 1 2006 ----
-data_reg %>% 
-  ggplot(aes(nvcPerc_06,X1))+ geom_point(colour = "#003f5c", size= 3, alpha = 1/3)+
-  geom_hline(yintercept =0, linetype = "dashed")+
-  stat_smooth(method = "lm", formula = y ~ x + I(x^2), lwd = 0.5, fill = "grey20", color = "black")+
-  theme_base()+
-  theme(legend.position = "none")+
-  labs(x = NULL, y = "Economic Poverty (PC-1)")+
-  theme(text = element_text(family = '', size = 10),
-        plot.background = element_blank())-> x1_06
+```
 
-##PC 1 2017----
-data_reg %>% 
-  ggplot(aes(nvcPerc_17,X1))+ geom_point(colour = "#003f5c", size= 3, alpha = 1/3)+
-  geom_hline(yintercept =0, linetype = "dashed")+
-  stat_smooth(method = "lm", formula = y ~ x + I(x^2), lwd = 0.5, fill = "grey20", color = "black")+
-  theme_base()+
-  theme(legend.position = "none")+
-  labs(x = NULL, y = NULL)+
-  theme(text = element_text(family = '', size = 10),
-        plot.background = element_blank())-> x1_17
-x1_17
 
-##PC 2 2006----
-data_reg %>% 
-  ggplot(aes(nvcPerc_06,X2))+ geom_point(colour = "#003f5c", size= 3, alpha = 1/3)+
-  geom_hline(yintercept =0, linetype = "dashed")+
-  stat_smooth(method = "lm", fill = "grey20", color = "black")+
-  theme_base()+
-  theme(legend.position = "none")+
-  labs(x = "Forest cover (%)", y = "Social Inequality (PC-2)")+
-  theme(text = element_text(family = '', size = 10),
-        plot.background = element_blank())-> x2_06
-x2_06
 
-##PC2 2017----
-data_reg %>% 
-  ggplot(aes(nvcPerc_17,X2))+ geom_point(colour = "#003f5c", size= 3, alpha = 1/3)+
-  geom_hline(yintercept =0, linetype = "dashed")+
-  stat_smooth(method = "lm", fill = "grey20", color = "black")+
-  theme_base()+
-  theme(legend.position = "none")+
-  labs(x = "Forest cover (%)", y =NULL)+
-  theme(text = element_text(family = '', size = 10),
-        plot.background = element_blank())-> x2_17
-x2_17
-
-###Figure 4----
-plot_grid(fs_fc_06, fs_fc_17, x1_06, x1_17, x2_06, x2_17,
-          align = "vh",
-          labels = "AUTO",
-          ncol = 2,
-          nrow = 3) ->fig4
-fig4
-
-ggsave(filename = here("figures/fig4.jpg"),
-       plot = fig4,
-       dpi = 300,
-       width = 8,
-       height = 8)
-
+# Correlações espaciais
+```{r }
 # Spatial autocorrelation test####
 
-read_sf("/home/lucas/Documentos/Doutorado/Dados/muncat_2020.shp")->mun_cat
+read_sf("muncat_2020.shp")->mun_cat # Essa base não está lá!
 a$code_muni<-as.character(a$code_muni)
 inner_join(mun_cat, a[-1,], by = c("CD_MUN" = "code_muni"))-> mun_cat_data
 poly2nb(mun_cat_data, queen=TRUE)-> mat_dist2
@@ -522,13 +521,153 @@ lm.morantest(glmq.fs06_fc06, mat_dist_list, alternative = "two.sided")
 lm.morantest(glmq.fs17_fc17, mat_dist_list, alternative = "two.sided")
 
 #Spatial autoregressive models####
-errorsarlm(data = a[-1,],
-           fs_06 ~ nvcPerc_06 + I(nvcPerc_06^2),
-           listw = mat_dist_list)->sem.fs06
-summary(sem.fs06)
+library(spdep)
+library(spatialreg)
 
 errorsarlm(data = a[-1,],
-           fs_17 ~ nvcPerc_17 + I(nvcPerc_17^2),
-           listw = mat_dist_list)->sem.fs17
+          fs_06 ~ nvcPerc_06 + I(nvcPerc_06^2),
+          mat_dist_list)->sem.fs06
+summary(sem.fs06)
+residuals(sem.fs06)->res_lm06
+moran.test(res_lm06, mat_dist_list, 999)
+
+errorsarlm(data = a[-1,],
+            fs_17 ~ nvcPerc_17 + I(nvcPerc_17^2),
+            listw = mat_dist_list)->sem.fs17
 summary(sem.fs17)
+residuals(sem.fs17)->res_lm17
+moran.test(res_lm17, mat_dist_list, 999)
+
+
+# For PC1
+
+errorsarlm(data = data_reg[-1,],#sempre lebrar de tirar esse municipio do MA
+          X1 ~ nvcPerc_06 + I(nvcPerc_06^2),
+          mat_dist_list)->PC1.fs06
+summary(PC1.fs06)
+residuals(PC1.fs06)->res_PC106
+moran.test(res_PC106, mat_dist_list, 999)
+
+errorsarlm(data = data_reg[-1,],#sempre lebrar de tirar esse municipio do MA
+          X1 ~ nvcPerc_17 + I(nvcPerc_17^2),
+          mat_dist_list)->PC1.fs17
+summary(PC1.fs17)
+residuals(PC1.fs17)->res_PC117
+moran.test(res_PC117, mat_dist_list, 999)
+
+# For PC2
+
+errorsarlm(data = data_reg[-1,],#sempre lebrar de tirar esse municipio do MA
+          X2 ~ nvcPerc_06,
+          mat_dist_list)->PC2.fs06
+summary(PC2.fs06)
+residuals(PC2.fs06)->res_PC206
+moran.mc(res_PC206, mat_dist_list, 999)
+
+errorsarlm(data = data_reg[-1,],#sempre lebrar de tirar esse municipio do MA
+          X2 ~ nvcPerc_17,
+          mat_dist_list)->PC2.fs17
+summary(PC1.fs17)
+residuals(PC1.fs17)->res_PC117
+moran.mc(res_PC117, mat_dist_list, 999)
+
+
+```
+
+
+# Novas análises entre Forest Cover - PC1 e PC2 (em substituição aos boxplots)
+```{r}
+data_reg<-data.frame(mun_scores_17[,1:3],mun_scores_06[,2:3], a[,14:15] )
+
+#2006
+data_reg %>% 
+  ggplot(aes(nvcPerc_06,X1))+ geom_point(colour = "#003f5c", size= 3, alpha = 1/3)+
+  geom_hline(yintercept =0, linetype = "dashed")+
+  stat_smooth(method = "lm", formula = y ~ x + I(x^2), lwd = 0.5, fill = "grey20", color = "black")+
+  theme_base()+
+  theme(legend.position = "none")+
+  labs(x = NULL, y = "Economic Poverty (PC-1)")+
+  theme(text = element_text(family = '', size = 12),
+        plot.background = element_blank())-> x1_06
+x1_06
+
+data_reg %>% 
+  ggplot(aes(nvcPerc_06,X2))+ geom_point(colour = "#003f5c", size= 3, alpha = 1/3)+
+  geom_hline(yintercept =0, linetype = "dashed")+
+  stat_smooth(method = "lm", fill = "grey20", color = "black")+
+  theme_base()+
+  theme(legend.position = "none")+
+  labs(x = "Forest cover (%)", y = "Social Inequality (PC-2)")+
+  theme(text = element_text(family = '', size = 12),
+        plot.background = element_blank())-> x2_06
+x2_06
+
+# 2017
+data_reg %>% 
+  ggplot(aes(nvcPerc_17,X1))+ geom_point(colour = "#003f5c", size= 3, alpha = 1/3)+
+  geom_hline(yintercept =0, linetype = "dashed")+
+  stat_smooth(method = "lm", formula = y ~ x + I(x^2), lwd = 0.5, fill = "grey20", color = "black")+
+  theme_base()+
+  theme(legend.position = "none")+
+  labs(x = NULL, y = NULL)+
+  theme(text = element_text(family = '', size = 12),
+        plot.background = element_blank())-> x1_17
+x1_17
+
+data_reg %>% 
+  ggplot(aes(nvcPerc_17,X2))+ geom_point(colour = "#003f5c", size= 3, alpha = 1/3)+
+  geom_hline(yintercept =0, linetype = "dashed")+
+  stat_smooth(method = "lm", fill = "grey20", color = "black")+
+  theme_base()+
+  theme(legend.position = "none")+
+  labs(x = "Forest cover (%)", y =NULL)+
+  theme(text = element_text(family = '', size = 12),
+        plot.background = element_blank())-> x2_17
+x2_17
+
+```
+
+# Juntando as regressões
+
+```{r}
+plot_grid(fs_fc_06,fs_fc_17,x1_06,x1_17,x2_06,x2_17, align = "vh",labels = "AUTO",ncol = 2, nrow = 3) ->fig3
+fig3
+```
+
+
+
+# Descritivas para resultados
+
+```{r echo=FALSE}
+
+# Forest Cover
+mun_scores_06 %>% 
+  mutate(code_muni=as.numeric(code_muni))->mun_scores_06
+
+str(mun_scores_06)
+
+str(a)
+
+a<-inner_join(a,mun_scores_06, by="code_muni")
+
+a %>% 
+  group_by(relation) %>% 
+  # summarise_at(vars(X1,X2,X3,X4), lst(mean,sd))
+  ggplot(aes(relation, X2))+geom_boxplot()
+
+a %>%  # essa é a base mais completa
+  group_by(netFor) %>% 
+  summarize_at(vars(netfc), lst(mean, sd))
+
+a %>%
+  select(netfc, netfs) %>% 
+  filter(netfc>10) 
+  
+# Food Security
+a %>%  # essa é a base mais completa
+  group_by(netFor) %>% 
+  summarize_at(vars(netfs), lst(mean, sd))
+
+
+```
 
