@@ -272,10 +272,10 @@ dbcap2_clean%>%
   glimpse() ->map_fsc
 
 map_fsc%>%
-  mutate(relation = as.factor(if_else(condition = fcc > 0 & fsc>0, true = "win-win",
-                                      false = if_else(condition = fcc > 0 & fsc < 0, true = "win-lose",
-                                                      false = if_else(condition = fcc< 0 & fsc > 0, true = "lose-win",
-                                                                      false = if_else(condition = fcc<0 & fsc <0, true = "lose-lose",
+  mutate(relation = as.factor(if_else(condition = fcc > 0 & fsc>0, true = "Gain-Gain",
+                                      false = if_else(condition = fcc > 0 & fsc < 0, true = "Gain-Lose",
+                                                      false = if_else(condition = fcc< 0 & fsc > 0, true = "Lose-Gain",
+                                                                      false = if_else(condition = fcc<0 & fsc <0, true = "Lose-Lose",
                                                                                       false = "pizza"))))))%>%
   glimpse()-> map_fsc
 
